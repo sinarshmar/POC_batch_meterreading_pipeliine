@@ -1,18 +1,18 @@
 # POC Summary
-The pipeline reads JSON files representing smart meter data, joins them with a SQLite database of static entities, and outputs final tables suitable for reporting and dashboarding. Although automation and orchestration are not implemented, the solution is built to be easily schedulable using tools like Airflow or cron.
+This is a **proof of concept (POC)** data pipeline that demonstrates processing smart meter readings. It reads JSON files, joins them with SQLite reference data, and outputs aggregated tables. This POC focuses on demonstrating the core data flow and transformations rather than production-grade features.
 
 ---
-# Design Philosophy
+# Design Approach
 
-- **Simplicity first**: Built in modular Python files for clarity and reusability.
-- **Delta-friendly design**: Optimised for incremental writes, deduplication, and MERGE support.
-- **Ready for orchestration**: Though currently batch-triggered, it's DAG-ready with clear boundaries for task separation.
+- **Basic implementation**: Simple Python modules to demonstrate the data flow
+- **Delta Lake exploration**: Testing Delta features for potential production use
+- **Modular structure**: Separated into logical components for clarity
 
 ---
 
 # Pipeline Structure
 
-The pipeline follows a **three-layer architecture** to ensure scalability, reusability, and maintainability:
+The POC implements a three-layer architecture to demonstrate data processing stages:
 
 - **Raw Layer**:  
   - Loads raw JSON smart meter readings and SQLite tables without transformation.
@@ -49,10 +49,9 @@ spark-submit --jars "$(pwd)/Kraken_assignment/jars/sqlite-jdbc-3.50.2.0.jar" mai
 ### Input Assumptions
 - JSON files: `data/readings/*.json`
 - SQLite DB: `data/case_study.db`
-- All the fresh datafor the day is available by 8 am.
-- All smart meter readings are stored as individual JSON files under a folder like `data/readings/`.
-- Each file follows a custom format with `"columns"` and `"data"` keys.
-- 🚨🚨🚨 **In cloud deployment**, the pipeline will be modified to ingest **only the most recent files** (e.g., from the last 24 hours or with specific naming logic) to improve efficiency.
+- Sample data covers 3 days (Jan 1-3, 2021)
+- Each JSON file contains readings for a single meter point
+- **Note**: This POC processes all files in the directory - production version would need date filtering
 
 
 ---
@@ -71,69 +70,80 @@ All outputs are saved in Delta format under `data_lake/presentation/`:
 
 ---
 
-# Robust Pipeline Design Features
+# POC Features Demonstrated
 
-### Deduplication
-
-Smart meter data may contain duplicate readings for the same meterpoint and interval due to retries or ingestion overlaps. This pipeline automatically removes such duplicates using:
+### Basic Deduplication
+The POC includes simple deduplication logic:
 ```python
 .dropDuplicates(["interval_start", "meterpoint_id"])
 ```
-This ensures that downstream metrics (e.g., total kWh) are accurate and not inflated.
+Note: This is a basic implementation that doesn't handle edge cases like different consumption values for duplicates.
+
+### Delta Lake Testing
+The POC experiments with Delta Lake features:
+- Basic MERGE operations for one table
+- Partitioned writes for performance testing
+- Simple file logging mechanism
+
+**Limitations**: No optimization, Z-ordering, or VACUUM implemented yet.
+
+### Current Implementation Notes
+- **File Processing**: Currently loads ALL files serially (not scalable)
+- **Memory Usage**: Contains `.collect()` operations that would fail with large datasets
+- **Error Handling**: Basic try-catch with print statements (not production-ready)
+- **Configuration**: Hardcoded dates and paths throughout
 
 ---
 
-### Safe Re-runs
+# Known Limitations & Future Improvements
 
-The pipeline is **idempotent**, meaning you can run it multiple times without corrupting or duplicating data. This is achieved by:
-- Deduplicating input data
-- Using Delta Lake’s MERGE operations to update only necessary rows
-- Tracking which input files have already been processed
-- Writing data in partitioned form (to avoid full table overwrites)
+## Current POC Limitations
+- **Not production-ready**: This is a demonstration of data flow concepts only
+- **Performance issues**: Serial file loading and `.collect()` operations won't scale
+- **No error recovery**: Failed files are silently skipped
+- **Missing validation**: No schema enforcement or data quality checks
+- **Basic logging**: Uses print statements instead of proper logging framework
 
----
+## Future Improvements for Production
 
-### Partitioning for Scale
+## Performance Optimizations
+- **Parallelize file ingestion**: Replace serial JSON loading with `spark.read.json()` for parallel processing
+- **Eliminate .collect() bottleneck**: Replace driver-side collection with distributed operations
+- **Implement broadcast joins**: Use broadcast hints for small dimension tables (product, meterpoint)
+- **Add caching strategy**: Cache frequently accessed dimension tables
+- **Delta optimization**: Implement Z-ordering, OPTIMIZE, and VACUUM commands
+- **Partition pruning**: Add partition filters to reduce data scanning
 
-Large datasets are written using Delta partitioning:
-- Aggregated tables (e.g., by day or half-hour) are partitioned by `interval_start` or `date`
-- This improves read/write performance and allows targeted refresh of only relevant partitions
+## Production Readiness
+- **Robust error handling**: Replace generic exceptions with specific error types and recovery strategies
+- **Implement retry logic**: Add exponential backoff for transient failures
+- **Structured logging**: Replace print statements with proper logging framework (e.g., structlog)
+- **Schema validation**: Define and enforce schemas using StructType before processing
+- **Data quality checks**: Add null checks, range validations, and anomaly detection
+- **Monitoring & alerting**: Integrate with Datadog/Prometheus for metrics and alerts
+- **Circuit breaker pattern**: Prevent cascade failures in pipeline steps
 
-Partitioning allows the pipeline to scale from thousands to millions of records without a drop in performance.
+## Scalability & Architecture
+- **Configuration management**: Externalize hardcoded values to config files/environment variables
+- **Checkpoint & recovery**: Implement Spark checkpointing for failure recovery
+- **Incremental processing**: Modify to process only new/changed files since last run
+- **Streaming architecture**: Consider Spark Structured Streaming for real-time processing
+- **Data lineage**: Implement Apache Atlas or DataHub for tracking data flow
+- **Multi-tenancy support**: Add customer/region-based data isolation
 
----
+## Testing & Quality
+- **Unit tests**: Add comprehensive tests for all transformation logic
+- **Integration tests**: Test end-to-end pipeline with sample data
+- **Data validation tests**: Verify output correctness and completeness
+- **Performance tests**: Benchmark with production-scale data volumes
+- **CI/CD pipeline**: Automate testing and deployment
 
-### Delta MERGE Logic
-
-The pipeline uses **Delta Lake’s `MERGE INTO`** feature to support **incremental refresh** in presentation tables. Instead of overwriting full tables:
-- New records are inserted
-- Existing records (based on `date` and `product_display_name`) are updated in place
-
-
----
-
-### Logging of Ingested Files
-
-To ensure incremental ingestion, each processed file is logged into a Delta-based ingestion log table (`raw_ingestion_log`). Before any file is processed, the pipeline checks this log to prevent reprocessing.
-
-Logged metadata includes:
-- File name
-- Ingestion timestamp
-
-This approach ensures data lineage, traceability, and protection from accidental duplicate ingestion.
-
----
-
-# Future Improvements
-
-- Automate pipeline using Airflow or Cloud Composer (triggered daily after 8am)
-- Add data quality checks (null handling, schema validation, anomaly detection)
-- Store metadata about file ingestion status (for incremental loads)
-- Migrate to GCP Dataproc for Cloud deployment
-- Add unit tests for all transformation logic (e.g., with PyTest)
-- Implement detailed logging and error handling with structured logs
-- Implement schema enforcement using pyspark.sql.types.StructType or schema registry.
-- Enable alerting and observability by emitting metrics (e.g., file counts, ingestion latency) to Prometheus/Grafana or Cloud Monitoring.
+## Orchestration & Operations
+- **Workflow orchestration**: Integrate with Airflow/Prefect for scheduling and dependencies
+- **Idempotency verification**: Ensure all operations are truly idempotent
+- **Backfill capabilities**: Add support for reprocessing historical data
+- **SLA monitoring**: Track and alert on pipeline completion times
+- **Cost optimization**: Implement spot instances and auto-scaling for cloud deployment
 
 # Acknowledgements
 
