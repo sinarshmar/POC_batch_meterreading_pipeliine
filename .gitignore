@@ -1,0 +1,35 @@
+# Claude AI
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log
+artifacts/
+
+# Data
+*.parquet
+*.db
+data_lake/
+checkpoint/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
