@@ -43,7 +43,7 @@ pip install -r requirements.txt
 
 ### Run the Pipeline
 ```bash
-spark-submit --jars "$(pwd)/Kraken_assignment/jars/sqlite-jdbc-3.50.2.0.jar" main.py
+spark-submit --jars "$(pwd)/energy_pipeline/jars/sqlite-jdbc-3.50.2.0.jar" main.py
 ```
 
 ### Input Assumptions
@@ -148,9 +148,3 @@ The POC experiments with Delta Lake features:
 # Acknowledgements
 
 Parts of this README and minor code optimisations were improved with the help of ChatGPT, used as a coding assistant to refine explanations, clarify logic, and enhance structure for clarity and efficiency.
-
-
-# Confidential Submission
-
-This project is submitted solely for assessment by Octopus Energy.  
-It must not be redistributed, reused, or made public in any form, including GitHub or online portfolios.
