@@ -1,4 +1,4 @@
-# Project Summary
+# POC Summary
 The pipeline reads JSON files representing smart meter data, joins them with a SQLite database of static entities, and outputs final tables suitable for reporting and dashboarding. Although automation and orchestration are not implemented, the solution is built to be easily schedulable using tools like Airflow or cron.
 
 ---
@@ -6,7 +6,6 @@ The pipeline reads JSON files representing smart meter data, joins them with a S
 
 - **Simplicity first**: Built in modular Python files for clarity and reusability.
 - **Delta-friendly design**: Optimised for incremental writes, deduplication, and MERGE support.
-- **Production-minded**: Code is safe for reruns, partitions are used, and ingestion is traceable.
 - **Ready for orchestration**: Though currently batch-triggered, it's DAG-ready with clear boundaries for task separation.
 
 ---
@@ -110,7 +109,6 @@ The pipeline uses **Delta Lake’s `MERGE INTO`** feature to support **increment
 - New records are inserted
 - Existing records (based on `date` and `product_display_name`) are updated in place
 
-This is more efficient and production-friendly than full-table rewrites and avoids race conditions during reruns.
 
 ---
 
